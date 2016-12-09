@@ -1,0 +1,120 @@
+/*_______                 ___________   _________                   _____             
+__  ____/______ _________ ___(_)__  /   __  ____/_________  __________  /_____________
+_  / __ __  __ `__ \  __ `/_  /__/ /    _  /    _  __ \  / / /_  __ \  __/  _ \_  ___/
+/ /_/ / _/ / / / / / /_/ /_/ / _/ /     / /___  / /_/ / /_/ /_  / / / /_ /  __/  /    
+\____/  /_/ /_/ /_/\__,_/ /_/  /_/      \____/  \____/\__,_/ /_/ /_/\__/ \___//_/     
+                                                                                      
+--++[ Count No. of Messages in Gmail by Date & Search Query, & Export to Excel ]++--
+
+{ Created by: David Connelly | 8th Dec, 2016 }
+
+NOTES:
+   1. The script connects to the ID of the Google Sheet, obtain the id from 
+      the URL in the browser when creating the sheet.
+   2. To change the criteria for the emails, alter the Search_Query string
+      to reflect the same search string used in gmail (in browser). 
+   3. Remember the '-' (minus) symbol is used as a 'Not' operator in the search query.
+   4. Beware of the 500 record limit when executing this script.
+   5. The script uses the stars feature in gmail to determine uncounted
+      messages. 
+   6. The excel file is saved in a Drive folder, nominated by it's ID.
+*/
+
+
+// FUNCTION: Iterate through the messages and record in Google Sheets
+function countMessagesLiveChat() {
+
+// Connect to Google Sheet by Sheet ID
+var data_id = 'PUT ID OF SHEET HERE';
+var dataSs = SpreadsheetApp.openById(data_id);
+var sheet = dataSs.getSheets()[0];
+var ssName = dataSs.getName(); 
+  
+// Create search query
+var Search_Query = ("label:live-chat -is:starred");
+
+// Get Threads from search query  
+var Threads = GmailApp.search(Search_Query)
+
+// Define Un-Starred Message Counter
+var NumUnStars = 0
+
+// Get the number of threads in current query  
+var ThreadCount = Threads.length;
+//Logger.log ('Thread Count = '+ThreadCount);
+
+// Iterate through threads
+for (i=0; i < ThreadCount; i++) {
+  
+  // Get array of messages in current thread
+  var Msgs = Threads[i].getMessages();
+  var DateUnStars = 0;
+  
+  // Iterate through messages
+  for (m=0; m < Msgs.length; m++) {
+    
+    // Create the date of current message for export 
+    var MsgDate = new Date(Msgs[m].getDate());
+    
+    // Check if message is not starred, update the count, and star the message if so.
+    if (Msgs[m].isStarred() == false) {
+       DateUnStars = DateUnStars + 1;
+       NumUnStars = NumUnStars + 1;
+       Msgs[m].star();
+     }     
+          
+   }
+   // Write the data to the next row in the spreadsheet
+   sheet.appendRow([MsgDate,DateUnStars]);
+ }
+  
+  // Set execution time in sheet
+  execTime(sheet);
+  
+  // Run the Export to Excel function
+  exportToDrive(data_id, ssName); 
+  
+  //Logger.log ('Number of UnStarred Messages ' + NumUnStars);
+}
+
+
+// FUNCTION: Convert the Google Sheet to an Excel file and save in Drive
+function exportToDrive(sheetID, sheetName) {
+  // Uses a blob to create a new excel file in drive, via URL Fetch. 
+  var url = "https://docs.google.com/feeds/download/spreadsheets/Export?key=" + sheetID + "&exportFormat=xlsx";
+  var response = UrlFetchApp.fetch(url, {
+      method      : "get",
+      headers     : {"Authorization": "Bearer " + ScriptApp.getOAuthToken()},
+      muteHttpExceptions: true
+  }).getBlob(); 
+  
+  response.setName(sheetName + ".xlsx");
+    
+  // If file exists trash it and create a new file. 
+  
+  //Open the Drive folder (by ID)
+  var reportFolder = DriveApp.getFolderById('ID OF GOOGLE DRIVE FOLDER HERE'); 
+  
+  //Get the Excel file by name, from the folder (if it doesn't exist the Iterator will be empty). This method returns a FileIterator
+  var fileByName = reportFolder.getFilesByName(response.getName()); 
+  
+  //Test if the Iterator is empty (file does not exist)
+  if (fileByName.hasNext() == false) {
+    reportFolder.createFile(response); // Save the file to Drive. This is the DriveApp.createFile(blob) method
+  } else {
+    var file = fileByName.next();
+    file.setTrashed(true);
+    //DriveApp.createFile(response);
+    reportFolder.createFile(response);
+  };
+}
+
+
+// FUNCTION: Set the script execution time in cell C2
+function execTime(sheetObj){
+ 
+  var executionTime = new Date();
+  var cell = sheetObj.getRange("C2");
+  cell.setValue(executionTime);
+  
+}
